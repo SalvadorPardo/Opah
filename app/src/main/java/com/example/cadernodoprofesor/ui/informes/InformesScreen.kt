@@ -44,7 +44,7 @@ import java.time.LocalDate
 @Composable
 fun InformesScreen(viewModel: CalendarioViewModel) {
     var selectedInformeTab by rememberSaveable { mutableIntStateOf(0) }
-    val informeTabs = listOf("Asistencia", "Individual", "Centros", "Eventos")
+    val informeTabs = listOf("Asistencia", "Individual", "Centros", "Eventos", "Período")
 
     Column(modifier = Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedInformeTab) {
@@ -62,8 +62,55 @@ fun InformesScreen(viewModel: CalendarioViewModel) {
             1 -> InformeAltaUI(viewModel)
             2 -> InformeCentros(viewModel)
             3 -> InformeEventos(viewModel)
+            4 -> InformePorPeriodo(viewModel)
         }
     }
+}
+
+@Composable
+fun InformePorPeriodo(viewModel: CalendarioViewModel) {
+    var fechaInicio by rememberSaveable { mutableStateOf(LocalDate.now().withDayOfMonth(1).toString()) }
+    var fechaFin by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var showDatePickerInicio by remember { mutableStateOf(false) }
+    var showDatePickerFin by remember { mutableStateOf(false) }
+    val prefs by viewModel.preferencias.collectAsState()
+
+    val dateInicio = remember(fechaInicio) { LocalDate.parse(fechaInicio) }
+    val dateFin = remember(fechaFin) { LocalDate.parse(fechaFin) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Informe Global por Período", style = MaterialTheme.typography.titleLarge)
+        Text("Xerarase un ficheiro .ZIP con informes individuais y resumos de cada aula en formato ODT.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SelectorFecha(label = "Dende", fecha = fechaInicio, onClick = { showDatePickerInicio = true }, modifier = Modifier.weight(1f))
+                    SelectorFecha(label = "Ata", fecha = fechaFin, onClick = { showDatePickerFin = true }, modifier = Modifier.weight(1f))
+                }
+
+                Text("Destino do ZIP", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val currentPrefs = prefs ?: Preferencias()
+                    FilterChip(selected = currentPrefs.destinoInformes == "BOX", onClick = { viewModel.actualizarPreferencias(currentPrefs.copy(destinoInformes = "BOX")) }, label = { Text("BoxAbalar") })
+                    FilterChip(selected = currentPrefs.destinoInformes == "LOCAL", onClick = { viewModel.actualizarPreferencias(currentPrefs.copy(destinoInformes = "LOCAL")) }, label = { Text("Teléfono") })
+                    FilterChip(selected = currentPrefs.destinoInformes == "AMBOS", onClick = { viewModel.actualizarPreferencias(currentPrefs.copy(destinoInformes = "AMBOS")) }, label = { Text("Ambos") })
+                }
+            }
+        }
+
+        Button(
+            onClick = { viewModel.generarInformePeriodoZip(dateInicio, dateFin) },
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
+            Icon(Icons.Default.CalendarMonth, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Xerar ZIP de informes")
+        }
+    }
+
+    if (showDatePickerInicio) DatePickerModal(initialDate = dateInicio, onDismiss = { showDatePickerInicio = false }, onConfirm = { fechaInicio = it.toString(); showDatePickerInicio = false })
+    if (showDatePickerFin) DatePickerModal(initialDate = dateFin, onDismiss = { showDatePickerFin = false }, onConfirm = { fechaFin = it.toString(); showDatePickerFin = false })
 }
 
 @Composable
@@ -86,11 +133,14 @@ fun InformeCentros(viewModel: CalendarioViewModel) {
     
     val centros = remember(asistencias, alumnosActivos, alumnosHistoricos) {
         val idsAlumnosPeriodo = asistencias.map { it.alumnoId }.toSet()
-        (alumnosActivos + alumnosHistoricos)
+        val centrosList = (alumnosActivos + alumnosHistoricos)
             .filter { it.id in idsAlumnosPeriodo && it.centroEstudos.isNotBlank() }
             .map { it.centroEstudos }
-            .distinct()
-            .sorted()
+        
+        val counts = centrosList.groupingBy { it }.eachCount()
+        counts.map { (centro, count) ->
+            if (count > 1) "$centro ($count)" else centro
+        }.sorted()
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -495,8 +545,8 @@ fun ValoracionInformeAlta(
 ) {
     val prefs by viewModel.preferencias.collectAsState()
     val esPrimaria = alumno.nivel == "Primaria"
-    val objetivosItems = if (esPrimaria) OBXETIVOS_PRIMARIA else OBXETIVOS_SECUNDARIA
-    val competenciasItems = if (esPrimaria) COMPETENCIAS_PRIMARIA else COMPETENCIAS_SECUNDARIA
+    val objetivosItems = remember(esPrimaria) { (if (esPrimaria) OBXETIVOS_PRIMARIA else OBXETIVOS_SECUNDARIA).sorted() }
+    val competenciasItems = remember(esPrimaria) { (if (esPrimaria) COMPETENCIAS_PRIMARIA else COMPETENCIAS_SECUNDARIA).sorted() }
 
     val objetivosRatings = remember { mutableStateMapOf<String, String>() }
     val competenciasRatings = remember { mutableStateMapOf<String, String>() }
@@ -634,7 +684,7 @@ fun ValoracionInformeAlta(
         Column {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expObjetivos = !expObjetivos }) {
                 Checkbox(checked = incluirObjetivos, onCheckedChange = { incluirObjetivos = it })
-                Text("Grao de logo dos obxectivos Xerais da etapa", modifier = Modifier.weight(1f))
+                Text("Grao de logro dos obxectivos Xerais da etapa", modifier = Modifier.weight(1f))
                 Icon(if (expObjetivos) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
             }
             if (expObjetivos) {

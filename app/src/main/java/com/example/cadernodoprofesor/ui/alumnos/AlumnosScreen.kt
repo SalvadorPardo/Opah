@@ -63,6 +63,7 @@ fun AlumnosScreen(
     
     var mostrandoAlta by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var historicoExpandido by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedContent(
@@ -236,24 +237,41 @@ fun AlumnosScreen(
                                                 } else {
                                                     viewModel.registrarAsistencia(alumno.id, fechaReferencia, aulaId)
                                                 }
-                                            }
+                                            },
+                                            aulaId = aulaId
                                         )
                                     }
                                 }
                                 
                                 if (alumnosHistoricos.isNotEmpty()) {
                                     item {
-                                        Text("Histórico de Alumnos", style = MaterialTheme.typography.titleSmall, color = Color.Gray, modifier = Modifier.padding(top = 16.dp))
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { historicoExpandido = !historicoExpandido }
+                                                .padding(top = 16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Histórico de Alumnos", style = MaterialTheme.typography.titleSmall, color = Color.Gray, modifier = Modifier.weight(1f))
+                                            Icon(
+                                                if (historicoExpandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                contentDescription = null,
+                                                tint = Color.Gray
+                                            )
+                                        }
                                     }
-                                    itemsIndexed(alumnosHistoricos) { index, alumno ->
-                                        FilaAlumno(
-                                            alumno = alumno,
-                                            index = index,
-                                            esHoy = false,
-                                            tieneAsistencia = false,
-                                            onClick = { alumnoIdDetalle = alumno.id },
-                                            onAsistencia = {}
-                                        )
+                                    if (historicoExpandido) {
+                                        itemsIndexed(alumnosHistoricos) { index, alumno ->
+                                            FilaAlumno(
+                                                alumno = alumno,
+                                                index = index,
+                                                esHoy = false,
+                                                tieneAsistencia = false,
+                                                onClick = { alumnoIdDetalle = alumno.id },
+                                                onAsistencia = {},
+                                                aulaId = aulaId
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1015,8 +1033,18 @@ fun DetalleMateria(alumno: Alumno, materia: MateriaAlumno, viewModel: Calendario
 }
 
 @Composable
-fun FilaAlumno(alumno: Alumno, index: Int, esHoy: Boolean, tieneAsistencia: Boolean, onClick: () -> Unit, onAsistencia: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }.alpha(if (alumno.esActivo) 1f else 0.6f)) {
+fun FilaAlumno(alumno: Alumno, index: Int, esHoy: Boolean, tieneAsistencia: Boolean, onClick: () -> Unit, onAsistencia: () -> Unit, aulaId: String = "") {
+    val containerColor = when {
+        !alumno.esActivo -> MaterialTheme.colorScheme.surface
+        aulaId == "HDDIJNP" -> Color(0xFFE8F5E9)
+        aulaId == "USMIJHAC" -> Color(0xFFFFFDE7)
+        else -> MaterialTheme.colorScheme.surface
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.alpha(if (alumno.esActivo) 1f else 0.6f),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${index + 1}.", modifier = Modifier.width(24.dp))
             Column(modifier = Modifier.weight(1f)) {
